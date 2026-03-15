@@ -239,3 +239,88 @@ function trashFlagged() {
     Logger.log('Already-trashed messages are marked in DB — no double-trashing.');
   }
 }
+function dailyReport() {
+  const scriptProps = PropertiesService.getScriptProperties();
+  const apiBase = scriptProps.getProperty('API_BASE');
+  const apiKey  = scriptProps.getProperty('API_KEY');
+
+  const response = UrlFetchApp.fetch(apiBase + '/stats', {
+    method: 'get',
+    headers: { 'X-API-Key': apiKey },
+    muteHttpExceptions: true
+  });
+
+  if (response.getResponseCode() !== 200) {
+    Logger.log('ERROR fetching stats: ' + response.getContentText());
+    return;
+  }
+
+  const data = JSON.parse(response.getContentText());
+  const t = data.totals;
+  const domains = data.domains;
+
+  const now = Utilities.formatDate(new Date(), 'America/New_York', 'MMM d, yyyy h:mm a');
+
+  let rows = '';
+  for (const d of domains) {
+    const pctTrashed = d.total > 0 ? Math.round((d.trashed / d.total) * 100) : 0;
+    rows += `
+      <tr>
+        <td>${d.sender_domain}</td>
+        <td align="right">${d.total}</td>
+        <td align="right">${d.flagged}</td>
+        <td align="right">${d.trashed}</td>
+        <td align="right">${pctTrashed}%</td>
+      </tr>`;
+  }
+
+  const html = `
+    <html><body style="font-family: Arial, sans-serif; font-size: 14px; color: #222;">
+    <h2 style="color: #1a73e8;">Gmail Cleaner Daily Report</h2>
+    <p>${now} EDT</p>
+
+    <table style="border-collapse: collapse; margin-bottom: 24px;">
+      <tr>
+        <td style="padding: 6px 16px 6px 0;"><b>Total messages in DB:</b></td>
+        <td>${Number(t.total_messages).toLocaleString()}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 16px 6px 0;"><b>Total flagged:</b></td>
+        <td>${Number(t.total_flagged).toLocaleString()}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 16px 6px 0;"><b>Total trashed:</b></td>
+        <td>${Number(t.total_trashed).toLocaleString()}</td>
+      </tr>
+      <tr>
+        <td style="padding: 6px 16px 6px 0;"><b>Unique domains:</b></td>
+        <td>${Number(t.total_domains).toLocaleString()}</td>
+      </tr>
+    </table>
+
+    <h3>Top 30 Domains</h3>
+    <table style="border-collapse: collapse; width: 100%;">
+      <thead>
+        <tr style="background: #1a73e8; color: white;">
+          <th style="padding: 8px 12px; text-align: left;">Domain</th>
+          <th style="padding: 8px 12px; text-align: right;">Total</th>
+          <th style="padding: 8px 12px; text-align: right;">Flagged</th>
+          <th style="padding: 8px 12px; text-align: right;">Trashed</th>
+          <th style="padding: 8px 12px; text-align: right;">% Done</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+    </body></html>`;
+
+  GmailApp.sendEmail(
+    'jim.shaffer@gmail.com',
+    'Gmail Cleaner Report — ' + now,
+    'This report requires an HTML-capable email client.',
+    { htmlBody: html }
+  );
+
+  Logger.log('Daily report sent.');
+}
