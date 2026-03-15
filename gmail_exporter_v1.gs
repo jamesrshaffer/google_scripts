@@ -66,8 +66,13 @@ function exportMessages() {
         const domain   = extractDomain(sender);
         const subject  = (headers['Subject'] || '').substring(0, 500);
         const dateStr  = headers['Date'] || '';
-        const received = new Date(dateStr).toISOString()
-                           .replace('T', ' ').substring(0, 19);
+        let received;
+        try {
+          const d = new Date(dateStr);
+          received = isNaN(d.getTime()) ? '1970-01-01 00:00:00' : d.toISOString().replace('T', ' ').substring(0, 19);
+        } catch(e) {
+          received = '1970-01-01 00:00:00';
+        }
         const label    = (msg.labelIds || []).join(',').substring(0, 64);
 
         batch.push({
