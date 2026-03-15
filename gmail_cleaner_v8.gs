@@ -386,3 +386,86 @@ function _fmtDate(d) {
 function _pad(str, len) {
   return (str + " ".repeat(len)).substring(0, len);
 }
+function trashFlagged() {
+  const scriptProps = PropertiesService.getScriptProperties();
+  const apiBase = scriptProps.getProperty('API_BASE');
+  const apiKey  = scriptProps.getProperty('API_KEY');
+
+  const TRASH_BATCH_SIZE = 50;
+  let totalTrashed = 0;
+  let totalErrors  = 0;
+  let quotaExhausted = false;
+
+  // Fetch flagged message IDs from the API
+  let ids;
+  try {
+    const response = UrlFetchApp.fetch(apiBase + '/flagged', {
+      method: 'get',
+      headers: { 'X-API-Key': apiKey },
+      muteHttpExceptions: true
+    });
+    if (response.getResponseCode() !== 200) {
+      Logger.log('ERROR fetching flagged list: ' + response.getContentText());
+      return;
+    }
+    ids = JSON.parse(response.getContentText());
+  } catch(e) {
+    Logger.log('ERROR fetching flagged list: ' + e.message);
+    return;
+  }
+
+  if (ids.length === 0) {
+    Logger.log('No flagged messages to trash.');
+    return;
+  }
+
+  Logger.log('Flagged messages to trash: ' + ids.length);
+
+  // Process in batches
+  for (let i = 0; i < ids.length; i += TRASH_BATCH_SIZE) {
+    const batch = ids.slice(i, i + TRASH_BATCH_SIZE);
+    const trashed = [];
+
+    for (const id of batch) {
+      try {
+        GmailApp.getMessageById(id).moveToTrash();
+        trashed.push(id);
+        totalTrashed++;
+      } catch(e) {
+        if (e.message.includes('quota') || e.message.includes('rate')) {
+          quotaExhausted = true;
+          Logger.log('QUOTA WARNING at message ' + totalTrashed + ': ' + e.message);
+          break;
+        }
+        // Message not found or already trashed — skip it
+        totalErrors++;
+      }
+    }
+
+    // Confirm trashed batch back to API
+    if (trashed.length > 0) {
+      try {
+        UrlFetchApp.fetch(apiBase + '/trashed', {
+          method: 'post',
+          contentType: 'application/json',
+          headers: { 'X-API-Key': apiKey },
+          payload: JSON.stringify(trashed),
+          muteHttpExceptions: true
+        });
+      } catch(e) {
+        Logger.log('ERROR confirming trashed batch: ' + e.message);
+      }
+    }
+
+    if (quotaExhausted) break;
+  }
+
+  // Summary
+  Logger.log('=== trashFlagged summary ===');
+  Logger.log('Total trashed: ' + totalTrashed);
+  Logger.log('Total errors (skipped): ' + totalErrors);
+  if (quotaExhausted) {
+    Logger.log('QUOTA WARNING: stopped early. Run again after quota resets.');
+    Logger.log('Already-trashed messages are marked in DB — no double-trashing.');
+  }
+}
