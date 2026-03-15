@@ -4,7 +4,7 @@ const props  = PropertiesService.getScriptProperties();
 const API_BASE = props.getProperty('API_BASE');
 const API_KEY  = props.getProperty('API_KEY');
 const BATCH_SIZE = 100;
-const SEARCH_LIMIT = 10000;
+const SEARCH_LIMIT = 1000;
 const QUOTA_SAFETY_LIMIT = 18000; // stop before hitting 20k hard ceiling
 
 function exportMessages() {
@@ -91,6 +91,9 @@ function exportMessages() {
           postBatch(batch);
           totalExported += batch.length;
           batch = [];
+          // Save progress after every batch in case of timeout
+          props.setProperty('EXPORT_PAGE_TOKEN', pageToken || '');
+          props.setProperty('DAILY_API_CALLS', apiCalls.toString());
         }
 
         if (totalExported >= SEARCH_LIMIT) break;
