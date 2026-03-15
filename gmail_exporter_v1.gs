@@ -1,11 +1,13 @@
-const API_BASE = 'https://api.shafferassoc.com';
-const API_KEY  = 'Q7F9K2W8RZ4H0MPLX3T8VJ5C9N2B6YD';
+
+// Read from Script Properties:
+const props  = PropertiesService.getScriptProperties();
+const API_BASE = props.getProperty('API_BASE');
+const API_KEY  = props.getProperty('API_KEY');
 const BATCH_SIZE = 100;
 const SEARCH_LIMIT = 10000;
 const QUOTA_SAFETY_LIMIT = 18000; // stop before hitting 20k hard ceiling
 
 function exportMessages() {
-  const props = PropertiesService.getScriptProperties();
   let pageToken = props.getProperty('EXPORT_PAGE_TOKEN') || null;
   let totalExported = 0;
   let apiCalls = parseInt(props.getProperty('DAILY_API_CALLS') || '0');
