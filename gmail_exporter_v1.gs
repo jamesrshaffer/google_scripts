@@ -10,7 +10,7 @@ const QUOTA_SAFETY_LIMIT = 18000; // stop before hitting 20k hard ceiling
 function exportMessages() {
   let pageToken = props.getProperty('EXPORT_PAGE_TOKEN') || null;
   let totalExported = 0;
-  let apiCalls = parseInt(props.getProperty('DAILY_API_CALLS') || '0');
+  let apiCalls = 0;
   let batch = [];
   let quotaExhausted = false;
   let errorMsg = null;
