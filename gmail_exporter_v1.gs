@@ -219,19 +219,24 @@ function trashFlagged() {
     }
 
     // Confirm trashed batch back to API
-    if (trashed.length > 0) {
+  if (trashed.length > 0) {
+    let confirmed = false;
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        UrlFetchApp.fetch(apiBase + '/trashed', {
+        const r = UrlFetchApp.fetch(apiBase + '/trashed', {
           method: 'post',
           contentType: 'application/json',
           headers: { 'X-API-Key': apiKey },
           payload: JSON.stringify(trashed),
           muteHttpExceptions: true
         });
+        if (r.getResponseCode() === 200) { confirmed = true; break; }
       } catch(e) {
-        Logger.log('ERROR confirming trashed batch: ' + e.message);
+        Utilities.sleep(2000);
       }
     }
+    if (!confirmed) Logger.log('WARNING: Could not confirm batch to DB after 3 attempts.');
+  }
 
     if (quotaExhausted) break;
   }
