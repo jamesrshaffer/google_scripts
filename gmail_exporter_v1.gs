@@ -157,11 +157,13 @@ function resetExportPointer() {
   Logger.log('Export pointer and call counter reset.');
 }
 function trashFlagged() {
+  const START_TIME = new Date();
+  const MAX_RUNTIME_MS = 300000; // 5 minutes
   const scriptProps = PropertiesService.getScriptProperties();
   const apiBase = scriptProps.getProperty('API_BASE');
   const apiKey  = scriptProps.getProperty('API_KEY');
+  const TRASH_BATCH_SIZE = 20;
 
-  const TRASH_BATCH_SIZE = 50;
   let totalTrashed = 0;
   let totalErrors  = 0;
   let quotaExhausted = false;
@@ -193,6 +195,10 @@ function trashFlagged() {
 
   // Process in batches
   for (let i = 0; i < ids.length; i += TRASH_BATCH_SIZE) {
+      if (new Date() - START_TIME > MAX_RUNTIME_MS) {
+        Logger.log('Approaching time limit — stopping cleanly.');
+        break;
+      }
     const batch = ids.slice(i, i + TRASH_BATCH_SIZE);
     const trashed = [];
 
