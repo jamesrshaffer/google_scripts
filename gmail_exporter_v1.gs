@@ -207,7 +207,6 @@ function trashFlagged() {
         Gmail.Users.Messages.trash('me', id);
         trashed.push(id);
         totalTrashed++;
-        Utilities.sleep(200); // 200ms between each trash call
       } catch(e) {
         if (e.message.includes('quota') || e.message.includes('rate')) {
           quotaExhausted = true;
