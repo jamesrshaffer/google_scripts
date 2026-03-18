@@ -204,7 +204,7 @@ function trashFlagged() {
 
     for (const id of batch) {
       try {
-        GmailApp.getMessageById(id).moveToTrash();
+        Gmail.Users.Messages.trash('me', id);
         trashed.push(id);
         totalTrashed++;
         Utilities.sleep(200); // 200ms between each trash call
