@@ -78,6 +78,7 @@ app.get('/stats', requireKey, async (req, res) => {
     FROM v_domain_summary
     WHERE flagged = 0 AND trashed < total
     ORDER BY total DESC
+    LIMIT 100
   `);
   res.json({ totals, domains });
 });
