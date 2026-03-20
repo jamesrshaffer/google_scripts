@@ -51,25 +51,7 @@
   #loading { color: #888; font-style: italic; }
   #empty   { color: #666; margin-top: 12px; display: none; }
 
-  /* Confirm overlay */
-  #overlay {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,0.4); z-index: 100;
-    align-items: center; justify-content: center;
-  }
-  #overlay.show { display: flex; }
-  #confirmBox {
-    background: white; border-radius: 8px; padding: 28px 32px;
-    max-width: 420px; width: 90%; box-shadow: 0 4px 24px rgba(0,0,0,0.2);
-  }
-  #confirmBox h3 { margin-top: 0; color: #d93025; }
-  #confirmBox p { margin-bottom: 20px; }
-  #confirmBox .actions { display: flex; gap: 12px; justify-content: flex-end; }
-  #confirmBox button { padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
-  #confirmCancel { background: #eee; }
-  #confirmCancel:hover { background: #ddd; }
-  #confirmOk { background: #d93025; color: white; }
-  #confirmOk:hover { background: #a50e0e; }
+
 </style>
 </head>
 <body>
@@ -233,10 +215,6 @@ async function doFlag() {
   const ids = [...document.querySelectorAll('.msg-chk:checked')].map(cb => cb.value);
   if (ids.length === 0) return;
   if (!confirm(`Flag ${ids.length} message(s) from ${currentDomain} for deletion?`)) return;
-  
-  hideConfirm();
-  const ids = [...document.querySelectorAll('.msg-chk:checked')].map(cb => cb.value);
-  if (ids.length === 0) return;
 
   try {
     const r = await fetch('/flag-messages', {
@@ -251,15 +229,11 @@ async function doFlag() {
       `✅ Flagged <b>${data.flagged}</b> message(s) from <b>${currentDomain}</b> for deletion. ` +
       `Run <b>trashFlagged()</b> in Apps Script to trash them.`;
 
-    // Reload messages for this domain
     const r2 = await fetch(`/messages/${encodeURIComponent(currentDomain)}`, { headers });
     currentMessages = await r2.json();
     renderMessages();
 
-    // Refresh domain list counts
     await loadDomains();
-
-    // Re-highlight active domain
     document.querySelectorAll('.domain-row').forEach(row => {
       if (row.dataset.domain === currentDomain) row.classList.add('active');
     });
