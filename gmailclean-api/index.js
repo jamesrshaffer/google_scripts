@@ -82,6 +82,7 @@ app.get('/stats', requireKey, async (req, res) => {
   `);
   res.json({ totals, domains });
 });
+
 // POST /protect — add domains to protected list
 app.post('/protect', requireKey, async (req, res) => {
   const domains = req.body;
@@ -108,6 +109,7 @@ app.post('/flag-domains', requireKey, async (req, res) => {
   );
   res.json({ flagged: result.affectedRows });
 });
+
 // POST /auto-flag-partial — flag remaining messages for domains already partially flagged
 app.post('/auto-flag-partial', requireKey, async (req, res) => {
   const [result] = await db.query(`
@@ -119,6 +121,47 @@ app.post('/auto-flag-partial', requireKey, async (req, res) => {
         WHERE flagged > 0 AND (total - trashed) > 0 AND flagged < total
       )
   `);
+  res.json({ flagged: result.affectedRows });
+});
+
+// GET /protected-domains — protected domains with untrashed message counts, ascending
+app.get('/protected-domains', requireKey, async (req, res) => {
+  const [rows] = await db.query(`
+    SELECT p.domain,
+           COUNT(m.message_id) as total,
+           SUM(CASE WHEN m.flagged_delete=1 THEN 1 ELSE 0 END) as flagged
+    FROM protected_domains p
+    LEFT JOIN messages m ON m.sender_domain = p.domain AND m.trashed = 0
+    GROUP BY p.domain
+    ORDER BY total ASC
+  `);
+  res.json(rows);
+});
+
+// GET /messages/:domain — untrashed, unflagged messages for a domain
+app.get('/messages/:domain', requireKey, async (req, res) => {
+  const [rows] = await db.query(`
+    SELECT message_id, sender, subject, received_date
+    FROM messages
+    WHERE sender_domain = ?
+      AND trashed = 0
+      AND flagged_delete = 0
+    ORDER BY received_date DESC
+    LIMIT 200
+  `, [req.params.domain]);
+  res.json(rows);
+});
+
+// POST /flag-messages — flag specific message IDs for deletion
+app.post('/flag-messages', requireKey, async (req, res) => {
+  const ids = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'Expected non-empty array' });
+  }
+  const [result] = await db.query(
+    'UPDATE messages SET flagged_delete=1 WHERE message_id IN (?) AND trashed=0',
+    [ids]
+  );
   res.json({ flagged: result.affectedRows });
 });
 
