@@ -101,23 +101,12 @@
     <tbody id="msgTable"></tbody>
   </table>
   <div id="empty">✅ No unreviewed messages remaining for this domain.</div>
-  <button class="btn" id="flagBtn" onclick="showConfirm()" disabled>Flag Selected for Deletion</button>
+  <button class="btn" id="flagBtn" onclick="doFlag()" disabled>Flag Selected for Deletion</button>
 </div>
 
 <div id="results"></div>
 <div id="error"></div>
 
-<!-- Confirm overlay -->
-<div id="overlay">
-  <div id="confirmBox">
-    <h3>Confirm Deletion</h3>
-    <p id="confirmMsg"></p>
-    <div class="actions">
-      <button id="confirmCancel" onclick="hideConfirm()">Cancel</button>
-      <button id="confirmOk" onclick="doFlag()">Flag for Deletion</button>
-    </div>
-  </div>
-</div>
 
 <script>
 const KEY = 'Q7F9K2W8RZ4H0MPLX3T8VJ5C9N2B6YD';
@@ -240,20 +229,11 @@ function selectNone() {
 
 // ── Confirm & flag ───────────────────────────────────────────
 
-function showConfirm() {
-  const count = document.querySelectorAll('.msg-chk:checked').length;
-  if (count === 0) return;
-  document.getElementById('confirmMsg').textContent =
-    `Flag ${count} message(s) from ${currentDomain} for deletion? ` +
-    `They will be trashed on the next trashFlagged() run.`;
-  document.getElementById('overlay').classList.add('show');
-}
-
-function hideConfirm() {
-  document.getElementById('overlay').classList.remove('show');
-}
-
 async function doFlag() {
+  const ids = [...document.querySelectorAll('.msg-chk:checked')].map(cb => cb.value);
+  if (ids.length === 0) return;
+  if (!confirm(`Flag ${ids.length} message(s) from ${currentDomain} for deletion?`)) return;
+  
   hideConfirm();
   const ids = [...document.querySelectorAll('.msg-chk:checked')].map(cb => cb.value);
   if (ids.length === 0) return;
