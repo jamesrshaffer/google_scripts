@@ -340,6 +340,8 @@ function autoFlagPartial() {
   const apiBase = scriptProps.getProperty('API_BASE');
   const apiKey  = scriptProps.getProperty('API_KEY');
 
+  const now = Utilities.formatDate(new Date(), 'America/New_York', 'yyyy-MM-dd HH:mm:ss z');
+
   const response = UrlFetchApp.fetch(apiBase + '/auto-flag-partial', {
     method: 'post',
     contentType: 'application/json',
@@ -354,5 +356,5 @@ function autoFlagPartial() {
   }
 
   const data = JSON.parse(response.getContentText());
-  Logger.log('autoFlagPartial: flagged ' + data.flagged + ' messages — ' + _nowStr());
+  Logger.log('autoFlagPartial: flagged ' + data.flagged + ' messages — ' + now);
 }
