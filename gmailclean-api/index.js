@@ -76,9 +76,8 @@ app.get('/stats', requireKey, async (req, res) => {
     SELECT sender_domain, total, flagged, trashed,
            (total - trashed) as remaining
     FROM v_domain_summary
-    WHERE (total - trashed) > 0
+    WHERE flagged = 0 AND trashed < total
     ORDER BY total DESC
-    LIMIT 200
   `);
   res.json({ totals, domains });
 });
@@ -108,4 +107,18 @@ app.post('/flag-domains', requireKey, async (req, res) => {
   );
   res.json({ flagged: result.affectedRows });
 });
+// POST /auto-flag-partial — flag remaining messages for domains already partially flagged
+app.post('/auto-flag-partial', requireKey, async (req, res) => {
+  const [result] = await db.query(`
+    UPDATE messages SET flagged_delete = 1
+    WHERE flagged_delete = 0
+      AND trashed = 0
+      AND sender_domain IN (
+        SELECT sender_domain FROM v_domain_summary
+        WHERE flagged > 0 AND (total - trashed) > 0 AND flagged < total
+      )
+  `);
+  res.json({ flagged: result.affectedRows });
+});
+
 app.listen(3000, () => console.log('gmailclean-api listening on port 3000'));
