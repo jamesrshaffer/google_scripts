@@ -133,6 +133,7 @@ app.get('/protected-domains', requireKey, async (req, res) => {
     FROM protected_domains p
     LEFT JOIN messages m ON m.sender_domain = p.domain AND m.trashed = 0
     GROUP BY p.domain
+    HAVING total > 0
     ORDER BY total ASC
   `);
   res.json(rows);
