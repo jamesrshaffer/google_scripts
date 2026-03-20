@@ -4,173 +4,34 @@
 <meta charset="utf-8">
 <title>Gmail Cleaner</title>
 <style>
-  body { font-family: Arial, sans-serif; font-size: 14px; color: #222; margin: 24px; }
-  h1 { color: #1a73e8; }
-  .summary { margin-bottom: 16px; }
-  .summary span { margin-right: 24px; font-weight: bold; }
-  table { border-collapse: collapse; width: 100%; max-width: 900px; }
-  th { background: #1a73e8; color: white; padding: 8px 12px; text-align: left; }
-  th.num { text-align: right; }
-  td { padding: 6px 12px; border-bottom: 1px solid #eee; }
-  td.num { text-align: right; }
-  tr:hover { background: #f5f8ff; }
-  tr.protected { background: #fff8e1; }
-  .btn { 
-    margin-top: 16px; padding: 10px 28px; font-size: 15px;
-    background: #1a73e8; color: white; border: none; 
-    border-radius: 4px; cursor: pointer; 
+  body { font-family: Arial, sans-serif; font-size: 15px; color: #222; margin: 60px auto; max-width: 480px; text-align: center; }
+  h1 { color: #1a73e8; margin-bottom: 8px; }
+  p { color: #666; margin-bottom: 40px; }
+  .nav { display: flex; flex-direction: column; gap: 16px; }
+  .nav a {
+    display: block; padding: 18px 24px;
+    background: #1a73e8; color: white; text-decoration: none;
+    border-radius: 6px; font-size: 16px; font-weight: bold;
+    transition: background 0.2s;
   }
-  .btn:hover { background: #1557b0; }
-  .btn-danger { background: #d93025; }
-  .btn-danger:hover { background: #a50e0e; }
-  #results { margin-top: 16px; padding: 12px; background: #e8f5e9; border-radius: 4px; display: none; }
-  #error { margin-top: 16px; padding: 12px; background: #fce8e6; border-radius: 4px; display: none; }
-  .controls { margin-bottom: 12px; }
-  .controls button { margin-right: 8px; padding: 4px 12px; cursor: pointer; }
+  .nav a:hover { background: #1557b0; }
+  .nav a.secondary { background: #5f6368; }
+  .nav a.secondary:hover { background: #3c4043; }
+  .nav a small { display: block; font-weight: normal; font-size: 13px; opacity: 0.9; margin-top: 4px; }
 </style>
 </head>
 <body>
-
 <h1>Gmail Cleaner</h1>
-<div class="summary" id="summary">Loading...</div>
-
-<div class="controls">
-  <button onclick="selectAll()">Select All</button>
-  <button onclick="selectNone()">Select None</button>
-</div>
-
-<form id="domainForm">
-<table>
-  <thead>
-    <tr>
-      <th style="width:32px">Keep</th>
-      <th>Domain</th>
-      <th class="num">Total</th>
-      <th class="num">Flagged</th>
-      <th class="num">Trashed</th>
-      <th class="num">Remaining</th>
-    </tr>
-  </thead>
-  <tbody id="domainTable">
-    <tr><td colspan="6">Loading...</td></tr>
-  </tbody>
-</table>
-
-<br>
-<button type="button" class="btn btn-danger" onclick="process()">
-  🗑 Protect Checked &amp; Flag Rest
-</button>
-</form>
-
-<div id="results"></div>
-<div id="error"></div>
-
-<script>
-const API = '';  // same origin
-const KEY = 'Q7F9K2W8RZ4H0MPLX3T8VJ5C9N2B6YD';
-
-const headers = {
-  'Content-Type': 'application/json',
-  'X-API-Key': KEY
-};
-
-let allDomains = [];
-
-async function load() {
-  try {
-    const r = await fetch('/stats', { headers });
-    const data = await r.json();
-    const t = data.totals;
-
-    document.getElementById('summary').innerHTML =
-      `<span>In DB: ${Number(t.total_messages).toLocaleString()}</span>` +
-      `<span>Flagged: ${Number(t.total_flagged).toLocaleString()}</span>` +
-      `<span>Trashed: ${Number(t.total_trashed).toLocaleString()}</span>` +
-      `<span>Domains: ${Number(t.total_domains).toLocaleString()}</span>`;
-
-    allDomains = data.domains;
-    const tbody = document.getElementById('domainTable');
-    tbody.innerHTML = '';
-
-    for (const d of data.domains) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td style="text-align:center">
-          <input type="checkbox" name="protect" value="${d.sender_domain}">
-        </td>
-        <td>${d.sender_domain}</td>
-        <td class="num">${d.total}</td>
-        <td class="num">${d.flagged}</td>
-        <td class="num">${d.trashed}</td>
-        <td class="num">${d.remaining}</td>
-      `;
-      tbody.appendChild(tr);
-    }
-  } catch(e) {
-    document.getElementById('domainTable').innerHTML =
-      `<tr><td colspan="6">Error loading data: ${e.message}</td></tr>`;
-  }
-}
-
-function selectAll() {
-  document.querySelectorAll('input[name=protect]').forEach(cb => cb.checked = true);
-}
-
-function selectNone() {
-  document.querySelectorAll('input[name=protect]').forEach(cb => cb.checked = false);
-}
-
-async function process() {
-  const checked = [...document.querySelectorAll('input[name=protect]:checked')]
-    .map(cb => cb.value);
-  const checkedSet = new Set(checked);
-  const toFlag = allDomains
-    .map(d => d.sender_domain)
-    .filter(d => !checkedSet.has(d));
-
-  if (toFlag.length === 0) {
-    alert('No domains to flag — all are checked as protected.');
-    return;
-  }
-
-  const msg = `Protect ${checked.length} domain(s), flag ${toFlag.length} domain(s) for deletion. Proceed?`;
-  if (!confirm(msg)) return;
-
-  try {
-    // Protect checked domains
-    if (checked.length > 0) {
-      await fetch('/protect', {
-        method: 'POST', headers,
-        body: JSON.stringify(checked)
-      });
-    }
-
-    // Flag the rest
-    const flagResp = await fetch('/flag-domains', {
-      method: 'POST', headers,
-      body: JSON.stringify(toFlag)
-    });
-    const flagData = await flagResp.json();
-
-    const results = document.getElementById('results');
-    results.style.display = 'block';
-    results.innerHTML = `
-      ✅ Done! Protected: <b>${checked.length}</b> domain(s). 
-      Flagged for deletion: <b>${flagData.flagged}</b> message(s) across <b>${toFlag.length}</b> domain(s).
-      <br>Now run <b>trashFlagged()</b> in Apps Script to trash them.
-    `;
-
-    // Reload the table
-    await load();
-
-  } catch(e) {
-    const err = document.getElementById('error');
-    err.style.display = 'block';
-    err.innerHTML = `Error: ${e.message}`;
-  }
-}
-
-load();
-</script>
+<p>Choose a task</p>
+<nav class="nav">
+  <a href="domains.html">
+    🗑 Review Domains
+    <small>Flag unreviewed domains for bulk deletion</small>
+  </a>
+  <a href="protected.html" class="secondary">
+    🔍 Review Protected Messages
+    <small>Examine individual messages from protected domains</small>
+  </a>
+</nav>
 </body>
 </html>

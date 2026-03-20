@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gmail Cleaner — Protected Messages</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 14px; color: #222; margin: 24px; }
+  h1 { color: #1a73e8; }
+  .back { font-size: 13px; margin-bottom: 16px; }
+  .back a { color: #1a73e8; text-decoration: none; }
+  .back a:hover { text-decoration: underline; }
+
+  /* Domain list */
+  #domainPanel { max-width: 380px; }
+  #domainPanel h2 { font-size: 15px; margin-bottom: 8px; }
+  #domainList { border: 1px solid #ddd; border-radius: 4px; max-height: 400px; overflow-y: auto; }
+  .domain-row {
+    padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .domain-row:last-child { border-bottom: none; }
+  .domain-row:hover { background: #f5f8ff; }
+  .domain-row.active { background: #e8f0fe; font-weight: bold; }
+  .domain-row .count { font-size: 12px; color: #888; }
+
+  /* Message panel */
+  #msgPanel { display: none; margin-top: 24px; }
+  #msgPanel h2 { font-size: 15px; margin-bottom: 8px; }
+  .controls { margin-bottom: 10px; }
+  .controls button { margin-right: 8px; padding: 4px 12px; cursor: pointer; }
+
+  table { border-collapse: collapse; width: 100%; max-width: 1000px; }
+  th { background: #5f6368; color: white; padding: 8px 12px; text-align: left; }
+  td { padding: 6px 12px; border-bottom: 1px solid #eee; vertical-align: top; }
+  td.chk { width: 32px; text-align: center; }
+  td.date { white-space: nowrap; color: #666; font-size: 12px; width: 140px; }
+  td.subject { word-break: break-word; }
+  td.sender { font-size: 12px; color: #555; width: 220px; word-break: break-word; }
+  tr:hover { background: #f5f8ff; }
+
+  .btn {
+    margin-top: 16px; padding: 10px 28px; font-size: 15px;
+    background: #d93025; color: white; border: none;
+    border-radius: 4px; cursor: pointer;
+  }
+  .btn:hover { background: #a50e0e; }
+  .btn:disabled { background: #ccc; cursor: not-allowed; }
+
+  #results { margin-top: 16px; padding: 12px; background: #e8f5e9; border-radius: 4px; display: none; }
+  #error   { margin-top: 16px; padding: 12px; background: #fce8e6; border-radius: 4px; display: none; }
+  #loading { color: #888; font-style: italic; }
+  #empty   { color: #666; margin-top: 12px; display: none; }
+
+  /* Confirm overlay */
+  #overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4); z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  #overlay.show { display: flex; }
+  #confirmBox {
+    background: white; border-radius: 8px; padding: 28px 32px;
+    max-width: 420px; width: 90%; box-shadow: 0 4px 24px rgba(0,0,0,0.2);
+  }
+  #confirmBox h3 { margin-top: 0; color: #d93025; }
+  #confirmBox p { margin-bottom: 20px; }
+  #confirmBox .actions { display: flex; gap: 12px; justify-content: flex-end; }
+  #confirmBox button { padding: 8px 20px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
+  #confirmCancel { background: #eee; }
+  #confirmCancel:hover { background: #ddd; }
+  #confirmOk { background: #d93025; color: white; }
+  #confirmOk:hover { background: #a50e0e; }
+</style>
+</head>
+<body>
+
+<div class="back"><a href="index.html">← Back</a></div>
+<h1>Review Protected Messages</h1>
+<p style="color:#666">Domains are shown smallest-first. Select messages to flag for deletion, then confirm.</p>
+
+<div id="domainPanel">
+  <h2>Protected Domains <span id="domainCount" style="font-weight:normal;color:#888"></span></h2>
+  <div id="domainList"><div style="padding:12px;color:#888">Loading...</div></div>
+</div>
+
+<div id="msgPanel">
+  <h2>Messages from <b id="activeDomain"></b> <span id="msgCount" style="font-weight:normal;color:#888"></span></h2>
+  <div class="controls">
+    <button onclick="selectAll()">Select All</button>
+    <button onclick="selectNone()">Select None</button>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th class="chk">🗑</th>
+        <th>Subject</th>
+        <th>Sender</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody id="msgTable"></tbody>
+  </table>
+  <div id="empty">✅ No unreviewed messages remaining for this domain.</div>
+  <button class="btn" id="flagBtn" onclick="showConfirm()" disabled>Flag Selected for Deletion</button>
+</div>
+
+<div id="results"></div>
+<div id="error"></div>
+
+<!-- Confirm overlay -->
+<div id="overlay">
+  <div id="confirmBox">
+    <h3>Confirm Deletion</h3>
+    <p id="confirmMsg"></p>
+    <div class="actions">
+      <button id="confirmCancel" onclick="hideConfirm()">Cancel</button>
+      <button id="confirmOk" onclick="doFlag()">Flag for Deletion</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const KEY = 'Q7F9K2W8RZ4H0MPLX3T8VJ5C9N2B6YD';
+const headers = {
+  'Content-Type': 'application/json',
+  'X-API-Key': KEY
+};
+
+let currentDomain = null;
+let currentMessages = [];
+
+// ── Domain list ──────────────────────────────────────────────
+
+async function loadDomains() {
+  try {
+    const r = await fetch('/protected-domains', { headers });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const domains = await r.json();
+
+    const list = document.getElementById('domainList');
+    document.getElementById('domainCount').textContent = `(${domains.length})`;
+
+    if (domains.length === 0) {
+      list.innerHTML = '<div style="padding:12px;color:#888">No protected domains found.</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    for (const d of domains) {
+      const row = document.createElement('div');
+      row.className = 'domain-row';
+      row.dataset.domain = d.domain;
+      row.innerHTML =
+        `<span>${d.domain}</span>` +
+        `<span class="count">${d.total ?? 0} msgs</span>`;
+      row.onclick = () => selectDomain(d.domain, row);
+      list.appendChild(row);
+    }
+  } catch(e) {
+    document.getElementById('domainList').innerHTML =
+      `<div style="padding:12px;color:red">Error: ${e.message}</div>`;
+  }
+}
+
+async function selectDomain(domain, rowEl) {
+  // Highlight selected row
+  document.querySelectorAll('.domain-row').forEach(r => r.classList.remove('active'));
+  rowEl.classList.add('active');
+
+  currentDomain = domain;
+  document.getElementById('activeDomain').textContent = domain;
+  document.getElementById('msgPanel').style.display = 'block';
+  document.getElementById('msgTable').innerHTML =
+    '<tr><td colspan="4" id="loading" style="color:#888;font-style:italic">Loading...</td></tr>';
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('error').style.display = 'none';
+  document.getElementById('flagBtn').disabled = true;
+
+  try {
+    const r = await fetch(`/messages/${encodeURIComponent(domain)}`, { headers });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    currentMessages = await r.json();
+    renderMessages();
+  } catch(e) {
+    document.getElementById('msgTable').innerHTML =
+      `<tr><td colspan="4" style="color:red">Error: ${e.message}</td></tr>`;
+  }
+}
+
+// ── Message table ────────────────────────────────────────────
+
+function renderMessages() {
+  const tbody = document.getElementById('msgTable');
+  tbody.innerHTML = '';
+  document.getElementById('msgCount').textContent = `(${currentMessages.length} unreviewed)`;
+
+  if (currentMessages.length === 0) {
+    document.getElementById('empty').style.display = 'block';
+    document.getElementById('flagBtn').disabled = true;
+    return;
+  }
+
+  document.getElementById('empty').style.display = 'none';
+
+  for (const m of currentMessages) {
+    const tr = document.createElement('tr');
+    const date = m.received_date ? m.received_date.substring(0, 10) : '';
+    const subject = m.subject || '(no subject)';
+    const sender = m.sender || '';
+    tr.innerHTML = `
+      <td class="chk">
+        <input type="checkbox" class="msg-chk" value="${m.message_id}">
+      </td>
+      <td class="subject">${escHtml(subject)}</td>
+      <td class="sender">${escHtml(sender)}</td>
+      <td class="date">${date}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  // Enable flag button when any checkbox changes
+  tbody.addEventListener('change', updateFlagBtn);
+}
+
+function updateFlagBtn() {
+  const anyChecked = document.querySelectorAll('.msg-chk:checked').length > 0;
+  document.getElementById('flagBtn').disabled = !anyChecked;
+}
+
+function selectAll() {
+  document.querySelectorAll('.msg-chk').forEach(cb => cb.checked = true);
+  updateFlagBtn();
+}
+
+function selectNone() {
+  document.querySelectorAll('.msg-chk').forEach(cb => cb.checked = false);
+  updateFlagBtn();
+}
+
+// ── Confirm & flag ───────────────────────────────────────────
+
+function showConfirm() {
+  const count = document.querySelectorAll('.msg-chk:checked').length;
+  if (count === 0) return;
+  document.getElementById('confirmMsg').textContent =
+    `Flag ${count} message(s) from ${currentDomain} for deletion? ` +
+    `They will be trashed on the next trashFlagged() run.`;
+  document.getElementById('overlay').classList.add('show');
+}
+
+function hideConfirm() {
+  document.getElementById('overlay').classList.remove('show');
+}
+
+async function doFlag() {
+  hideConfirm();
+  const ids = [...document.querySelectorAll('.msg-chk:checked')].map(cb => cb.value);
+  if (ids.length === 0) return;
+
+  try {
+    const r = await fetch('/flag-messages', {
+      method: 'POST', headers, body: JSON.stringify(ids)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+
+    const results = document.getElementById('results');
+    results.style.display = 'block';
+    results.innerHTML =
+      `✅ Flagged <b>${data.flagged}</b> message(s) from <b>${currentDomain}</b> for deletion. ` +
+      `Run <b>trashFlagged()</b> in Apps Script to trash them.`;
+
+    // Reload messages for this domain
+    const r2 = await fetch(`/messages/${encodeURIComponent(currentDomain)}`, { headers });
+    currentMessages = await r2.json();
+    renderMessages();
+
+    // Refresh domain list counts
+    await loadDomains();
+
+    // Re-highlight active domain
+    document.querySelectorAll('.domain-row').forEach(row => {
+      if (row.dataset.domain === currentDomain) row.classList.add('active');
+    });
+
+  } catch(e) {
+    const err = document.getElementById('error');
+    err.style.display = 'block';
+    err.innerHTML = `Error: ${e.message}`;
+  }
+}
+
+// ── Utilities ────────────────────────────────────────────────
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Init
+loadDomains();
+</script>
+</body>
+</html>
