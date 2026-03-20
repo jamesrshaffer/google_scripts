@@ -335,3 +335,24 @@ function dailyReport() {
 
   Logger.log('Daily report sent.');
 }
+function autoFlagPartial() {
+  const scriptProps = PropertiesService.getScriptProperties();
+  const apiBase = scriptProps.getProperty('API_BASE');
+  const apiKey  = scriptProps.getProperty('API_KEY');
+
+  const response = UrlFetchApp.fetch(apiBase + '/auto-flag-partial', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'X-API-Key': apiKey },
+    payload: '[]',
+    muteHttpExceptions: true
+  });
+
+  if (response.getResponseCode() !== 200) {
+    Logger.log('autoFlagPartial ERROR: ' + response.getContentText());
+    return;
+  }
+
+  const data = JSON.parse(response.getContentText());
+  Logger.log('autoFlagPartial: flagged ' + data.flagged + ' messages — ' + _nowStr());
+}
