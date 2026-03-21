@@ -71,18 +71,30 @@
 <div id="error"></div>
 
 <script>
-const KEY = 'Q7F9K2W8RZ4H0MPLX3T8VJ5C9N2B6YD';
-const headers = {
-  'Content-Type': 'application/json',
-  'X-API-Key': KEY
-};
+// API key stored in sessionStorage — prompted once per browser session, never hardcoded
+function getKey() {
+  let key = sessionStorage.getItem('gmailclean_key');
+  if (!key) {
+    key = prompt('Enter API key:');
+    if (!key) throw new Error('API key required');
+    sessionStorage.setItem('gmailclean_key', key);
+  }
+  return key;
+}
+
+function makeHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'X-API-Key': getKey()
+  };
+}
 
 let allDomains = [];
 
 async function load() {
   document.getElementById('results').style.display = 'none';
   try {
-    const r = await fetch('/stats', { headers });
+    const r = await fetch('/stats', { headers: makeHeaders() });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
     const t = data.totals;
@@ -146,16 +158,14 @@ async function process() {
     return;
   }
 
-  const msg = `Protect ${checked.length} domain(s), flag ${toFlag.length} domain(s) for deletion. Proceed?`;
-  if (!confirm(msg)) return;
-
   try {
+    const hdrs = makeHeaders();
     if (checked.length > 0) {
-      await fetch('/protect', { method: 'POST', headers, body: JSON.stringify(checked) });
+      await fetch('/protect', { method: 'POST', headers: hdrs, body: JSON.stringify(checked) });
     }
 
     const flagResp = await fetch('/flag-domains', {
-      method: 'POST', headers, body: JSON.stringify(toFlag)
+      method: 'POST', headers: hdrs, body: JSON.stringify(toFlag)
     });
     if (!flagResp.ok) throw new Error('HTTP ' + flagResp.status);
     const flagData = await flagResp.json();
