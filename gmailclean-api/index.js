@@ -139,17 +139,25 @@ app.get('/protected-domains', requireKey, async (req, res) => {
   res.json(rows);
 });
 
-// GET /messages/:domain — untrashed, unflagged messages for a domain
+// GET /messages/:domain — untrashed, unflagged messages for a domain, optional ?sender= filter
 app.get('/messages/:domain', requireKey, async (req, res) => {
+  const sender = req.query.sender || null;
+  const params = [req.params.domain];
+  let senderClause = '';
+  if (sender) {
+    senderClause = 'AND sender = ?';
+    params.push(sender);
+  }
   const [rows] = await db.query(`
     SELECT message_id, sender, subject, received_date
     FROM messages
     WHERE sender_domain = ?
       AND trashed = 0
       AND flagged_delete = 0
-    ORDER BY received_date DESC
-    LIMIT 200
-  `, [req.params.domain]);
+      ${senderClause}
+    ORDER BY received_date ASC
+    LIMIT 500
+  `, params);
   res.json(rows);
 });
 
@@ -162,6 +170,46 @@ app.post('/flag-messages', requireKey, async (req, res) => {
   const [result] = await db.query(
     'UPDATE messages SET flagged_delete=1 WHERE message_id IN (?) AND trashed=0',
     [ids]
+  );
+  res.json({ flagged: result.affectedRows });
+});
+
+// GET /domains-with-remaining — for autocomplete, domains with unflagged untrashed messages
+app.get('/domains-with-remaining', requireKey, async (req, res) => {
+  const [rows] = await db.query(`
+    SELECT DISTINCT sender_domain
+    FROM messages
+    WHERE trashed = 0 AND flagged_delete = 0
+    ORDER BY sender_domain ASC
+  `);
+  res.json(rows.map(r => r.sender_domain));
+});
+
+// GET /senders/:domain — distinct senders within a domain, unflagged+untrashed counts
+app.get('/senders/:domain', requireKey, async (req, res) => {
+  const [rows] = await db.query(`
+    SELECT sender,
+           COUNT(*) as total
+    FROM messages
+    WHERE sender_domain = ?
+      AND trashed = 0
+      AND flagged_delete = 0
+    GROUP BY sender
+    ORDER BY total DESC
+  `, [req.params.domain]);
+  res.json(rows);
+});
+
+// POST /flag-sender — flag all unflagged untrashed messages for a domain+sender
+app.post('/flag-sender', requireKey, async (req, res) => {
+  const { domain, sender } = req.body;
+  if (!domain || !sender) {
+    return res.status(400).json({ error: 'domain and sender required' });
+  }
+  const [result] = await db.query(
+    `UPDATE messages SET flagged_delete=1
+     WHERE sender_domain = ? AND sender = ? AND trashed = 0 AND flagged_delete = 0`,
+    [domain, sender]
   );
   res.json({ flagged: result.affectedRows });
 });
