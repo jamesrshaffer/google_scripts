@@ -338,7 +338,22 @@ async function doFlagAll() {
       `✅ Flagged <b>${data.flagged}</b> message(s) from <b>${escHtml(currentSender)}</b>. ` +
       `Run <b>trashFlagged()</b> in Apps Script to trash them.`;
 
+    // Find current position before reload
+    const rows = [...document.querySelectorAll('.sender-row')];
+    const currentIndex = rows.findIndex(r => r.dataset.sender === currentSender);
+
     await loadSenders(currentDomain);
+
+    // Highlight next sender down, or last if at end
+    const newRows = [...document.querySelectorAll('.sender-row')];
+    if (newRows.length > 0) {
+      const nextIndex = Math.min(currentIndex, newRows.length - 1);
+      const nextRow = newRows[nextIndex];
+      nextRow.classList.add('active');
+      currentSender = nextRow.dataset.sender;
+      nextRow.scrollIntoView({ block: 'nearest' });
+      selectSender(currentSender, nextRow);
+    }
     const url = `/messages/${encodeURIComponent(currentDomain)}?sender=${encodeURIComponent(currentSender)}`;
     const r2 = await fetch(url, { headers: makeHeaders() });
     currentMessages = await r2.json();
@@ -366,7 +381,22 @@ async function flagIds(ids) {
       `✅ Flagged <b>${data.flagged}</b> message(s) from <b>${escHtml(currentSender)}</b>. ` +
       `Run <b>trashFlagged()</b> in Apps Script to trash them.`;
 
+    // Find current position before reload
+    const rows = [...document.querySelectorAll('.sender-row')];
+    const currentIndex = rows.findIndex(r => r.dataset.sender === currentSender);
+
     await loadSenders(currentDomain);
+
+    // Highlight next sender down, or last if at end
+    const newRows = [...document.querySelectorAll('.sender-row')];
+    if (newRows.length > 0) {
+      const nextIndex = Math.min(currentIndex, newRows.length - 1);
+      const nextRow = newRows[nextIndex];
+      nextRow.classList.add('active');
+      currentSender = nextRow.dataset.sender;
+      nextRow.scrollIntoView({ block: 'nearest' });
+      selectSender(currentSender, nextRow);
+    }
     document.querySelectorAll('.sender-row').forEach(row => {
       if (row.dataset.sender === currentSender) row.classList.add('active');
     });
