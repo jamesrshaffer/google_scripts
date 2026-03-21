@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Gmail Cleaner — By Sender</title>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 14px; color: #222; margin: 24px; }
+  h1 { color: #1a73e8; }
+  .back { font-size: 13px; margin-bottom: 16px; }
+  .back a { color: #1a73e8; text-decoration: none; }
+  .back a:hover { text-decoration: underline; }
+
+  /* Domain autocomplete */
+  #domainBox { position: relative; max-width: 420px; margin-bottom: 24px; }
+  #domainBox label { display: block; font-weight: bold; margin-bottom: 6px; }
+  #domainInput {
+    width: 100%; padding: 8px 12px; font-size: 14px;
+    border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;
+  }
+  #domainInput:focus { outline: none; border-color: #1a73e8; }
+  #domainDropdown {
+    display: none; position: absolute; top: 100%; left: 0; right: 0;
+    border: 1px solid #ccc; border-top: none; background: white;
+    max-height: 240px; overflow-y: auto; z-index: 100;
+    border-radius: 0 0 4px 4px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  }
+  .dd-item {
+    padding: 8px 12px; cursor: pointer;
+  }
+  .dd-item:hover { background: #e8f0fe; }
+
+  /* Sender list */
+  #senderPanel { display: none; max-width: 480px; margin-bottom: 24px; }
+  #senderPanel h2 { font-size: 15px; margin-bottom: 8px; }
+  #senderList { border: 1px solid #ddd; border-radius: 4px; max-height: 360px; overflow-y: auto; }
+  .sender-row {
+    padding: 8px 12px; cursor: pointer; border-bottom: 1px solid #eee;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .sender-row:last-child { border-bottom: none; }
+  .sender-row:hover { background: #f5f8ff; }
+  .sender-row.active { background: #e8f0fe; font-weight: bold; }
+  .sender-row .count { font-size: 12px; color: #888; white-space: nowrap; margin-left: 12px; }
+
+  /* Message table */
+  #msgPanel { display: none; margin-top: 8px; }
+  #msgPanel h2 { font-size: 15px; margin-bottom: 8px; }
+  .controls { margin-bottom: 10px; }
+  .controls button { margin-right: 8px; padding: 4px 12px; cursor: pointer; }
+
+  table { border-collapse: collapse; width: 100%; max-width: 1100px; }
+  th { background: #1a73e8; color: white; padding: 8px 12px; text-align: left; }
+  td { padding: 6px 12px; border-bottom: 1px solid #eee; vertical-align: top; }
+  td.chk { width: 32px; text-align: center; }
+  td.date { white-space: nowrap; color: #666; font-size: 12px; width: 100px; }
+  td.subject { word-break: break-word; }
+  td.sender { font-size: 12px; color: #555; width: 260px; word-break: break-word; }
+  tr:hover { background: #f5f8ff; }
+
+  .btn {
+    margin-top: 16px; padding: 10px 28px; font-size: 15px;
+    background: #d93025; color: white; border: none;
+    border-radius: 4px; cursor: pointer;
+  }
+  .btn:hover { background: #a50e0e; }
+  .btn:disabled { background: #ccc; cursor: not-allowed; }
+  .btn-flag-all {
+    margin-top: 16px; margin-left: 12px; padding: 10px 28px; font-size: 15px;
+    background: #e37400; color: white; border: none;
+    border-radius: 4px; cursor: pointer;
+  }
+  .btn-flag-all:hover { background: #b35c00; }
+
+  #results { margin-top: 16px; padding: 12px; background: #e8f5e9; border-radius: 4px; display: none; }
+  #error   { margin-top: 16px; padding: 12px; background: #fce8e6; border-radius: 4px; display: none; }
+  #empty   { color: #666; margin-top: 12px; display: none; }
+</style>
+</head>
+<body>
+
+<div class="back"><a href="index.html">← Back</a></div>
+<h1>Review by Sender</h1>
+
+<div id="domainBox">
+  <label for="domainInput">Domain</label>
+  <input id="domainInput" type="text" placeholder="Type to search domains..." autocomplete="off">
+  <div id="domainDropdown"></div>
+</div>
+
+<div id="senderPanel">
+  <h2>Senders in <b id="activeDomain"></b> <span id="senderCount" style="font-weight:normal;color:#888"></span></h2>
+  <div id="senderList"><div style="padding:12px;color:#888">Loading...</div></div>
+</div>
+
+<div id="msgPanel">
+  <h2>Messages from <b id="activeSender"></b> <span id="msgCount" style="font-weight:normal;color:#888"></span></h2>
+  <div class="controls">
+    <button onclick="selectAll()">Select All</button>
+    <button onclick="selectNone()">Select None</button>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th class="chk">🗑</th>
+        <th>Subject</th>
+        <th>Sender</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody id="msgTable"></tbody>
+  </table>
+  <div id="empty">✅ No remaining messages for this sender.</div>
+  <button class="btn" id="flagBtn" onclick="doFlag()" disabled>Flag Selected for Deletion</button>
+  <button class="btn-flag-all" id="flagAllBtn" onclick="doFlagAll()">Flag All from this Sender</button>
+</div>
+
+<div id="results"></div>
+<div id="error"></div>
+
+<script>
+function getKey() {
+  let key = localStorage.getItem('gmailclean_key');
+  if (!key) {
+    key = prompt('Enter API key:');
+    if (!key) throw new Error('API key required');
+    localStorage.setItem('gmailclean_key', key);
+  }
+  return key;
+}
+
+function makeHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'X-API-Key': getKey()
+  };
+}
+
+let allDomains = [];
+let currentDomain = null;
+let currentSender = null;
+let currentMessages = [];
+
+// ── Domain autocomplete ──────────────────────────────────────
+
+async function loadDomains() {
+  try {
+    const r = await fetch('/domains-with-remaining', { headers: makeHeaders() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    allDomains = await r.json();
+  } catch(e) {
+    console.error('Failed to load domains:', e.message);
+  }
+}
+
+const domainInput = document.getElementById('domainInput');
+const domainDropdown = document.getElementById('domainDropdown');
+
+domainInput.addEventListener('input', () => {
+  const val = domainInput.value.trim().toLowerCase();
+  domainDropdown.innerHTML = '';
+  if (!val) { domainDropdown.style.display = 'none'; return; }
+
+  const matches = allDomains.filter(d => d.toLowerCase().startsWith(val)).slice(0, 50);
+  if (matches.length === 0) { domainDropdown.style.display = 'none'; return; }
+
+  for (const d of matches) {
+    const div = document.createElement('div');
+    div.className = 'dd-item';
+    div.textContent = d;
+    div.onclick = () => chooseDomain(d);
+    domainDropdown.appendChild(div);
+  }
+  domainDropdown.style.display = 'block';
+});
+
+domainInput.addEventListener('blur', () => {
+  setTimeout(() => { domainDropdown.style.display = 'none'; }, 150);
+});
+
+function chooseDomain(domain) {
+  domainInput.value = domain;
+  domainDropdown.style.display = 'none';
+  currentDomain = domain;
+  document.getElementById('activeDomain').textContent = domain;
+  document.getElementById('msgPanel').style.display = 'none';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('error').style.display = 'none';
+  loadSenders(domain);
+}
+
+// ── Sender list ──────────────────────────────────────────────
+
+async function loadSenders(domain) {
+  const panel = document.getElementById('senderPanel');
+  panel.style.display = 'block';
+  document.getElementById('senderList').innerHTML =
+    '<div style="padding:12px;color:#888">Loading...</div>';
+
+  try {
+    const r = await fetch(`/senders/${encodeURIComponent(domain)}`, { headers: makeHeaders() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const senders = await r.json();
+
+    document.getElementById('senderCount').textContent = `(${senders.length} sender(s))`;
+    const list = document.getElementById('senderList');
+
+    if (senders.length === 0) {
+      list.innerHTML = '<div style="padding:12px;color:#888">No remaining messages in this domain.</div>';
+      return;
+    }
+
+    list.innerHTML = '';
+    for (const s of senders) {
+      const row = document.createElement('div');
+      row.className = 'sender-row';
+      row.dataset.sender = s.sender;
+      row.innerHTML =
+        `<span>${escHtml(s.sender)}</span>` +
+        `<span class="count">${s.total} msgs</span>`;
+      row.onclick = () => selectSender(s.sender, row);
+      list.appendChild(row);
+    }
+  } catch(e) {
+    document.getElementById('senderList').innerHTML =
+      `<div style="padding:12px;color:red">Error: ${e.message}</div>`;
+  }
+}
+
+// ── Message table ────────────────────────────────────────────
+
+async function selectSender(sender, rowEl) {
+  document.querySelectorAll('.sender-row').forEach(r => r.classList.remove('active'));
+  rowEl.classList.add('active');
+
+  currentSender = sender;
+  document.getElementById('activeSender').textContent = sender;
+  document.getElementById('msgPanel').style.display = 'block';
+  document.getElementById('msgTable').innerHTML =
+    '<tr><td colspan="4" style="color:#888;font-style:italic">Loading...</td></tr>';
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('results').style.display = 'none';
+  document.getElementById('error').style.display = 'none';
+  document.getElementById('flagBtn').disabled = true;
+
+  try {
+    const url = `/messages/${encodeURIComponent(currentDomain)}?sender=${encodeURIComponent(sender)}`;
+    const r = await fetch(url, { headers: makeHeaders() });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    currentMessages = await r.json();
+    renderMessages();
+  } catch(e) {
+    document.getElementById('msgTable').innerHTML =
+      `<tr><td colspan="4" style="color:red">Error: ${e.message}</td></tr>`;
+  }
+}
+
+function renderMessages() {
+  const tbody = document.getElementById('msgTable');
+  tbody.innerHTML = '';
+  document.getElementById('msgCount').textContent = `(${currentMessages.length} messages)`;
+
+  if (currentMessages.length === 0) {
+    document.getElementById('empty').style.display = 'block';
+    document.getElementById('flagBtn').disabled = true;
+    return;
+  }
+
+  document.getElementById('empty').style.display = 'none';
+
+  for (const m of currentMessages) {
+    const tr = document.createElement('tr');
+    const date = m.received_date ? m.received_date.substring(0, 10) : '';
+    tr.innerHTML = `
+      <td class="chk"><input type="checkbox" class="msg-chk" value="${m.message_id}"></td>
+      <td class="subject">${escHtml(m.subject || '(no subject)')}</td>
+      <td class="sender">${escHtml(m.sender || '')}</td>
+      <td class="date">${date}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+
+  tbody.addEventListener('change', updateFlagBtn);
+}
+
+function updateFlagBtn() {
+  document.getElementById('flagBtn').disabled =
+    document.querySelectorAll('.msg-chk:checked').length === 0;
+}
+
+function selectAll() {
+  document.querySelectorAll('.msg-chk').forEach(cb => cb.checked = true);
+  updateFlagBtn();
+}
+
+function selectNone() {
+  document.querySelectorAll('.msg-chk').forEach(cb => cb.checked = false);
+  updateFlagBtn();
+}
+
+// ── Flag selected ────────────────────────────────────────────
+
+async function doFlag() {
+  const ids = [...document.querySelectorAll('.msg-chk:checked')].map(cb => cb.value);
+  if (ids.length === 0) return;
+  await flagIds(ids);
+}
+
+async function doFlagAll() {
+  const ids = currentMessages.map(m => m.message_id);
+  if (ids.length === 0) return;
+  await flagIds(ids);
+}
+
+async function flagIds(ids) {
+  document.getElementById('error').style.display = 'none';
+  try {
+    const r = await fetch('/flag-messages', {
+      method: 'POST', headers: makeHeaders(), body: JSON.stringify(ids)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+
+    const results = document.getElementById('results');
+    results.style.display = 'block';
+    results.innerHTML =
+      `✅ Flagged <b>${data.flagged}</b> message(s) from <b>${escHtml(currentSender)}</b>. ` +
+      `Run <b>trashFlagged()</b> in Apps Script to trash them.`;
+
+    await loadSenders(currentDomain);
+    document.querySelectorAll('.sender-row').forEach(row => {
+      if (row.dataset.sender === currentSender) row.classList.add('active');
+    });
+
+    const url = `/messages/${encodeURIComponent(currentDomain)}?sender=${encodeURIComponent(currentSender)}`;
+    const r2 = await fetch(url, { headers: makeHeaders() });
+    currentMessages = await r2.json();
+    renderMessages();
+
+  } catch(e) {
+    const err = document.getElementById('error');
+    err.style.display = 'block';
+    err.innerHTML = `Error: ${e.message}`;
+  }
+}
+
+function escHtml(str) {
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+loadDomains();
+</script>
+</body>
+</html>
