@@ -48,6 +48,17 @@
   .controls { margin-bottom: 10px; }
   .controls button { margin-right: 8px; padding: 4px 12px; cursor: pointer; }
 
+  .btn-inline-danger {
+    padding: 4px 12px; cursor: pointer; background: #d93025;
+    color: white; border: none; border-radius: 4px; font-size: 13px;
+  }
+  .btn-inline-danger:hover { background: #a50e0e; }
+  .btn-inline-orange {
+    padding: 4px 12px; cursor: pointer; background: #e37400;
+    color: white; border: none; border-radius: 4px; font-size: 13px;
+  }
+  .btn-inline-orange:hover { background: #b35c00; }
+
   table { border-collapse: collapse; width: 100%; max-width: 1100px; }
   th { background: #1a73e8; color: white; padding: 8px 12px; text-align: left; }
   td { padding: 6px 12px; border-bottom: 1px solid #eee; vertical-align: top; }
@@ -97,6 +108,8 @@
   <div class="controls">
     <button onclick="selectAll()">Select All</button>
     <button onclick="selectNone()">Select None</button>
+    <button class="btn-inline-danger" onclick="doFlag()">Flag Selected</button>
+    <button class="btn-inline-orange" onclick="doFlagAll()">Flag All from Sender</button>
   </div>
   <table>
     <thead>
@@ -213,6 +226,7 @@ async function loadSenders(domain) {
     for (const s of senders) {
       const row = document.createElement('div');
       row.className = 'sender-row';
+      if (s.sender === currentSender) row.classList.add('active');
       row.dataset.sender = s.sender;
       row.innerHTML =
         `<span>${escHtml(s.sender)}</span>` +
