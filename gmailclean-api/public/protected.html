@@ -10,7 +10,6 @@
   .back a { color: #1a73e8; text-decoration: none; }
   .back a:hover { text-decoration: underline; }
 
-  /* Domain list */
   #domainPanel { max-width: 380px; }
   #domainPanel h2 { font-size: 15px; margin-bottom: 8px; }
   #domainList { border: 1px solid #ddd; border-radius: 4px; max-height: 400px; overflow-y: auto; }
@@ -23,7 +22,6 @@
   .domain-row.active { background: #e8f0fe; font-weight: bold; }
   .domain-row .count { font-size: 12px; color: #888; }
 
-  /* Message panel */
   #msgPanel { display: none; margin-top: 24px; }
   #msgPanel h2 { font-size: 15px; margin-bottom: 8px; }
   .controls { margin-bottom: 10px; }
@@ -50,15 +48,13 @@
   #error   { margin-top: 16px; padding: 12px; background: #fce8e6; border-radius: 4px; display: none; }
   #loading { color: #888; font-style: italic; }
   #empty   { color: #666; margin-top: 12px; display: none; }
-
-
 </style>
 </head>
 <body>
 
 <div class="back"><a href="index.html">← Back</a></div>
 <h1>Review Protected Messages</h1>
-<p style="color:#666">Domains are shown smallest-first. Select messages to flag for deletion, then confirm.</p>
+<p style="color:#666">Domains are shown smallest-first. Select messages to flag for deletion.</p>
 
 <div id="domainPanel">
   <h2>Protected Domains <span id="domainCount" style="font-weight:normal;color:#888"></span></h2>
@@ -89,22 +85,30 @@
 <div id="results"></div>
 <div id="error"></div>
 
-
 <script>
-const KEY = 'Q7F9K2W8RZ4H0MPLX3T8VJ5C9N2B6YD';
-const headers = {
-  'Content-Type': 'application/json',
-  'X-API-Key': KEY
-};
+function getKey() {
+  let key = sessionStorage.getItem('gmailclean_key');
+  if (!key) {
+    key = prompt('Enter API key:');
+    if (!key) throw new Error('API key required');
+    sessionStorage.setItem('gmailclean_key', key);
+  }
+  return key;
+}
+
+function makeHeaders() {
+  return {
+    'Content-Type': 'application/json',
+    'X-API-Key': getKey()
+  };
+}
 
 let currentDomain = null;
 let currentMessages = [];
 
-// ── Domain list ──────────────────────────────────────────────
-
 async function loadDomains() {
   try {
-    const r = await fetch('/protected-domains', { headers });
+    const r = await fetch('/protected-domains', { headers: makeHeaders() });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const domains = await r.json();
 
@@ -134,7 +138,6 @@ async function loadDomains() {
 }
 
 async function selectDomain(domain, rowEl) {
-  // Highlight selected row
   document.querySelectorAll('.domain-row').forEach(r => r.classList.remove('active'));
   rowEl.classList.add('active');
 
@@ -149,7 +152,7 @@ async function selectDomain(domain, rowEl) {
   document.getElementById('flagBtn').disabled = true;
 
   try {
-    const r = await fetch(`/messages/${encodeURIComponent(domain)}`, { headers });
+    const r = await fetch(`/messages/${encodeURIComponent(domain)}`, { headers: makeHeaders() });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     currentMessages = await r.json();
     renderMessages();
@@ -158,8 +161,6 @@ async function selectDomain(domain, rowEl) {
       `<tr><td colspan="4" style="color:red">Error: ${e.message}</td></tr>`;
   }
 }
-
-// ── Message table ────────────────────────────────────────────
 
 function renderMessages() {
   const tbody = document.getElementById('msgTable');
@@ -190,7 +191,6 @@ function renderMessages() {
     tbody.appendChild(tr);
   }
 
-  // Enable flag button when any checkbox changes
   tbody.addEventListener('change', updateFlagBtn);
 }
 
@@ -209,16 +209,13 @@ function selectNone() {
   updateFlagBtn();
 }
 
-// ── Confirm & flag ───────────────────────────────────────────
-
 async function doFlag() {
   const ids = [...document.querySelectorAll('.msg-chk:checked')].map(cb => cb.value);
   if (ids.length === 0) return;
-  if (!confirm(`Flag ${ids.length} message(s) from ${currentDomain} for deletion?`)) return;
 
   try {
     const r = await fetch('/flag-messages', {
-      method: 'POST', headers, body: JSON.stringify(ids)
+      method: 'POST', headers: makeHeaders(), body: JSON.stringify(ids)
     });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
@@ -229,7 +226,7 @@ async function doFlag() {
       `✅ Flagged <b>${data.flagged}</b> message(s) from <b>${currentDomain}</b> for deletion. ` +
       `Run <b>trashFlagged()</b> in Apps Script to trash them.`;
 
-    const r2 = await fetch(`/messages/${encodeURIComponent(currentDomain)}`, { headers });
+    const r2 = await fetch(`/messages/${encodeURIComponent(currentDomain)}`, { headers: makeHeaders() });
     currentMessages = await r2.json();
     renderMessages();
 
@@ -245,13 +242,10 @@ async function doFlag() {
   }
 }
 
-// ── Utilities ────────────────────────────────────────────────
-
 function escHtml(str) {
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// Init
 loadDomains();
 </script>
 </body>
