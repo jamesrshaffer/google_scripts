@@ -18,7 +18,7 @@ cp "$REPO_DIR/public/protected.html" "$LIVE_DIR/public/protected.html"
 
 echo "=== [3/4] docker build ==="
 cd "$LIVE_DIR"
-docker build -t "$IMAGE" .
+docker build --no-cache -t "$IMAGE" .
 
 echo "=== [4/4] restart container ==="
 docker stop "$CONTAINER" 2>/dev/null || true
