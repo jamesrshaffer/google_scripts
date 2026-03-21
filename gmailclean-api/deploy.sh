@@ -15,6 +15,7 @@ cp "$REPO_DIR/index.js"              "$LIVE_DIR/index.js"
 cp "$REPO_DIR/public/index.html"     "$LIVE_DIR/public/index.html"
 cp "$REPO_DIR/public/domains.html"   "$LIVE_DIR/public/domains.html"
 cp "$REPO_DIR/public/protected.html" "$LIVE_DIR/public/protected.html"
+cp "$REPO_DIR/public/senders.html"     "$LIVE_DIR/public/senders.html"
 
 echo "=== [3/4] docker build ==="
 cd "$LIVE_DIR"
