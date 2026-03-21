@@ -14,7 +14,7 @@ function exportMessages() {
   let quotaExhausted = false;
   let errorMsg = null;
 
-  const query = 'in:anywhere -in:sent -in:draft older_than:30d';
+  const query = 'in:anywhere -in:sent -in:draft -in:trash older_than:30d';
 
   // ── Phase 1: collect stubs (newest-first from API) ──────────────────────
   let allStubs = [];
