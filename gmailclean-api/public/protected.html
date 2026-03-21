@@ -87,11 +87,11 @@
 
 <script>
 function getKey() {
-  let key = sessionStorage.getItem('gmailclean_key');
+  let key = localStorage.getItem('gmailclean_key');
   if (!key) {
     key = prompt('Enter API key:');
     if (!key) throw new Error('API key required');
-    sessionStorage.setItem('gmailclean_key', key);
+    localStorage.setItem('gmailclean_key', key);
   }
   return key;
 }
