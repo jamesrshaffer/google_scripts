@@ -8,25 +8,28 @@ const SEARCH_LIMIT = 1000;
 const QUOTA_SAFETY_LIMIT = 18000; // stop before hitting 20k hard ceiling
 
 function exportMessages() {
-  let pageToken = props.getProperty('EXPORT_PAGE_TOKEN') || null;
-  let totalExported = 0;
   let apiCalls = 0;
+  let totalExported = 0;
   let batch = [];
   let quotaExhausted = false;
   let errorMsg = null;
 
   const query = 'in:anywhere -in:sent -in:draft older_than:30d';
 
+  // ── Phase 1: collect stubs (newest-first from API) ──────────────────────
+  let allStubs = [];
+  let pageToken = null;
+
   try {
     do {
-      const options = { maxResults: 500 };
+      const options = { maxResults: 500, q: query };
       if (pageToken) options.pageToken = pageToken;
 
       let result;
       try {
         result = Gmail.Users.Messages.list('me', options);
         apiCalls++;
-      } catch(e) {
+      } catch (e) {
         if (e.message.includes('quota') || e.message.includes('rate')) {
           quotaExhausted = true;
           errorMsg = 'Quota hit on Messages.list: ' + e.message;
@@ -36,94 +39,115 @@ function exportMessages() {
       }
 
       if (!result || !result.messages) break;
+      allStubs = allStubs.concat(result.messages);
+      pageToken = result.nextPageToken || null;
 
-      for (const stub of result.messages) {
-        // Check quota headroom before each message fetch
-        if (apiCalls >= QUOTA_SAFETY_LIMIT) {
-          quotaExhausted = true;
-          errorMsg = 'Approaching quota ceiling at ' + apiCalls + ' calls. Stopping safely.';
-          break;
-        }
+    } while (pageToken && allStubs.length < SEARCH_LIMIT);
 
-        let msg;
-        try {
-          msg = Gmail.Users.Messages.get('me', stub.id, {
-            format: 'metadata',
-            metadataHeaders: ['From', 'Subject', 'Date']
-          });
-          apiCalls++;
-        } catch(e) {
-          if (e.message.includes('quota') || e.message.includes('rate')) {
-            quotaExhausted = true;
-            errorMsg = 'Quota hit on Messages.get after ' + apiCalls + ' calls: ' + e.message;
-            break;
-          }
-          throw e;
-        }
+  } catch (e) {
+    errorMsg = 'Unexpected error collecting stubs: ' + e.message;
+  }
 
-        const headers = {};
-        (msg.payload.headers || []).forEach(h => headers[h.name] = h.value);
+  // Trim to limit and reverse → oldest messages first
+  allStubs = allStubs.slice(0, SEARCH_LIMIT).reverse();
 
-        const sender   = headers['From'] || '';
-        const domain   = extractDomain(sender);
-        const subject  = (headers['Subject'] || '').substring(0, 500);
-        const dateStr  = headers['Date'] || '';
-        let received;
-        try {
-          const d = new Date(dateStr);
-          received = isNaN(d.getTime()) ? '1970-01-01 00:00:00' : d.toISOString().replace('T', ' ').substring(0, 19);
-        } catch(e) {
-          received = '1970-01-01 00:00:00';
-        }
-        const label    = (msg.labelIds || []).join(',').substring(0, 64);
+  if (quotaExhausted) {
+    Logger.log('=== exportMessages summary ===');
+    Logger.log('Aborted during stub collection. API calls: ' + apiCalls);
+    Logger.log('QUOTA WARNING: ' + errorMsg);
+    return;
+  }
 
-        batch.push({
-          thread_id:     msg.threadId,
-          message_id:    msg.id,
-          sender:        sender.substring(0, 255),
-          sender_domain: domain.substring(0, 128),
-          subject:       subject,
-          received_date: received,
-          label:         label
-        });
+  // ── Phase 2: fetch metadata oldest-first, resumable via EXPORT_STUB_INDEX ─
+  let stubIndex = parseInt(props.getProperty('EXPORT_STUB_INDEX') || '0', 10);
+  // If index is stale (beyond current batch), reset
+  if (stubIndex >= allStubs.length) stubIndex = 0;
 
-        if (batch.length >= BATCH_SIZE) {
-          postBatch(batch);
-          totalExported += batch.length;
-          batch = [];
-          // Save progress after every batch in case of timeout
-          props.setProperty('EXPORT_PAGE_TOKEN', pageToken || '');
-          props.setProperty('DAILY_API_CALLS', apiCalls.toString());
-        }
+  try {
+    for (let i = stubIndex; i < allStubs.length; i++) {
 
-        if (totalExported >= SEARCH_LIMIT) break;
+      if (apiCalls >= QUOTA_SAFETY_LIMIT) {
+        quotaExhausted = true;
+        errorMsg = 'Approaching quota ceiling at ' + apiCalls + ' calls. Stopping safely.';
+        props.setProperty('EXPORT_STUB_INDEX', i.toString());
+        break;
       }
 
-      pageToken = result.nextPageToken || null;
-      props.setProperty('EXPORT_PAGE_TOKEN', pageToken || '');
+      let msg;
+      try {
+        msg = Gmail.Users.Messages.get('me', allStubs[i].id, {
+          format: 'metadata',
+          metadataHeaders: ['From', 'Subject', 'Date']
+        });
+        apiCalls++;
+      } catch (e) {
+        if (e.message.includes('quota') || e.message.includes('rate')) {
+          quotaExhausted = true;
+          errorMsg = 'Quota hit on Messages.get after ' + apiCalls + ' calls: ' + e.message;
+          props.setProperty('EXPORT_STUB_INDEX', i.toString());
+          break;
+        }
+        throw e;
+      }
 
-      if (quotaExhausted) break;
+      const headers = {};
+      (msg.payload.headers || []).forEach(h => headers[h.name] = h.value);
 
-    } while (pageToken && totalExported < SEARCH_LIMIT);
+      const sender  = headers['From'] || '';
+      const domain  = extractDomain(sender);
+      const subject = (headers['Subject'] || '').substring(0, 500);
+      const dateStr = headers['Date'] || '';
+      let received;
+      try {
+        const d = new Date(dateStr);
+        received = isNaN(d.getTime()) ? '1970-01-01 00:00:00'
+                                      : d.toISOString().replace('T', ' ').substring(0, 19);
+      } catch (e) {
+        received = '1970-01-01 00:00:00';
+      }
+      const label = (msg.labelIds || []).join(',').substring(0, 64);
 
-  } catch(e) {
+      batch.push({
+        thread_id:     msg.threadId,
+        message_id:    msg.id,
+        sender:        sender.substring(0, 255),
+        sender_domain: domain.substring(0, 128),
+        subject:       subject,
+        received_date: received,
+        label:         label
+      });
+
+      if (batch.length >= BATCH_SIZE) {
+        postBatch(batch);
+        totalExported += batch.length;
+        batch = [];
+        props.setProperty('EXPORT_STUB_INDEX', (i + 1).toString());
+        props.setProperty('DAILY_API_CALLS', apiCalls.toString());
+      }
+    }
+
+  } catch (e) {
     errorMsg = 'Unexpected error after ' + apiCalls + ' calls: ' + e.message;
   }
 
-  // Flush any remaining batch
+  // Flush remainder
   if (batch.length > 0) {
     postBatch(batch);
     totalExported += batch.length;
   }
 
-  // Persist call count for visibility (resets manually or daily)
+  // Clear resume pointer on clean completion
+  if (!quotaExhausted) {
+    props.deleteProperty('EXPORT_STUB_INDEX');
+  }
+
   props.setProperty('DAILY_API_CALLS', apiCalls.toString());
 
-  // Summary log
+  // Summary
   Logger.log('=== exportMessages summary ===');
   Logger.log('Messages exported this run: ' + totalExported);
   Logger.log('API calls this run: ' + apiCalls);
-  Logger.log('Page token saved: ' + (pageToken ? 'yes (resumable)' : 'none'));
+  Logger.log('Stub pool size (oldest-first): ' + allStubs.length);
   if (quotaExhausted) {
     Logger.log('QUOTA WARNING: ' + errorMsg);
     Logger.log('Run again after quota resets (~8pm EDT or 10am EDT following day)');
@@ -152,8 +176,10 @@ function extractDomain(sender) {
 }
 
 function resetExportPointer() {
-  PropertiesService.getScriptProperties().deleteProperty('EXPORT_PAGE_TOKEN');
-  PropertiesService.getScriptProperties().deleteProperty('DAILY_API_CALLS');
+  const sp = PropertiesService.getScriptProperties();
+  sp.deleteProperty('EXPORT_PAGE_TOKEN');   // legacy, keep for safety
+  sp.deleteProperty('EXPORT_STUB_INDEX');
+  sp.deleteProperty('DAILY_API_CALLS');
   Logger.log('Export pointer and call counter reset.');
 }
 function trashFlagged() {
