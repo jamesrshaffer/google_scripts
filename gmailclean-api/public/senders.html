@@ -338,17 +338,22 @@ async function doFlagAll() {
       `✅ Flagged <b>${data.flagged}</b> message(s) from <b>${escHtml(currentSender)}</b>. ` +
       `Run <b>trashFlagged()</b> in Apps Script to trash them.`;
 
-    // Find current position before reload
+    // Capture the next sender name before list reloads
     const rows = [...document.querySelectorAll('.sender-row')];
     const currentIndex = rows.findIndex(r => r.dataset.sender === currentSender);
+    const nextSender = currentIndex >= 0 && currentIndex + 1 < rows.length
+      ? rows[currentIndex + 1].dataset.sender
+      : null;
 
     await loadSenders(currentDomain);
 
-    // Highlight next sender down, or last if at end
+    // Highlight next sender by name, fall back to same index
     const newRows = [...document.querySelectorAll('.sender-row')];
     if (newRows.length > 0) {
-      const nextIndex = Math.min(currentIndex, newRows.length - 1);
-      const nextRow = newRows[nextIndex];
+      let nextRow = nextSender
+        ? newRows.find(r => r.dataset.sender === nextSender)
+        : null;
+      if (!nextRow) nextRow = newRows[Math.min(currentIndex, newRows.length - 1)];
       nextRow.classList.add('active');
       currentSender = nextRow.dataset.sender;
       nextRow.scrollIntoView({ block: 'nearest' });
@@ -381,17 +386,22 @@ async function flagIds(ids) {
       `✅ Flagged <b>${data.flagged}</b> message(s) from <b>${escHtml(currentSender)}</b>. ` +
       `Run <b>trashFlagged()</b> in Apps Script to trash them.`;
 
-    // Find current position before reload
+    // Capture the next sender name before list reloads
     const rows = [...document.querySelectorAll('.sender-row')];
     const currentIndex = rows.findIndex(r => r.dataset.sender === currentSender);
+    const nextSender = currentIndex >= 0 && currentIndex + 1 < rows.length
+      ? rows[currentIndex + 1].dataset.sender
+      : null;
 
     await loadSenders(currentDomain);
 
-    // Highlight next sender down, or last if at end
+    // Highlight next sender by name, fall back to same index
     const newRows = [...document.querySelectorAll('.sender-row')];
     if (newRows.length > 0) {
-      const nextIndex = Math.min(currentIndex, newRows.length - 1);
-      const nextRow = newRows[nextIndex];
+      let nextRow = nextSender
+        ? newRows.find(r => r.dataset.sender === nextSender)
+        : null;
+      if (!nextRow) nextRow = newRows[Math.min(currentIndex, newRows.length - 1)];
       nextRow.classList.add('active');
       currentSender = nextRow.dataset.sender;
       nextRow.scrollIntoView({ block: 'nearest' });
