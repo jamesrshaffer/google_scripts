@@ -108,7 +108,7 @@
   <div class="controls">
     <button onclick="selectAll()">Select All</button>
     <button onclick="selectNone()">Select None</button>
-    <button class="btn-inline-danger" onclick="doFlag()">Flag Selected</button>
+    <button class="btn-inline-danger" id="flagBtnTop" onclick="doFlag()" disabled>Flag Selected</button>
     <button class="btn-inline-orange" onclick="doFlagAll()">Flag All from Sender</button>
   </div>
   <table>
@@ -255,6 +255,7 @@ async function selectSender(sender, rowEl) {
   document.getElementById('results').style.display = 'none';
   document.getElementById('error').style.display = 'none';
   document.getElementById('flagBtn').disabled = true;
+  document.getElementById('flagBtnTop').disabled = true;
 
   try {
     const url = `/messages/${encodeURIComponent(currentDomain)}?sender=${encodeURIComponent(sender)}`;
@@ -297,8 +298,9 @@ function renderMessages() {
 }
 
 function updateFlagBtn() {
-  document.getElementById('flagBtn').disabled =
-    document.querySelectorAll('.msg-chk:checked').length === 0;
+  const disabled = document.querySelectorAll('.msg-chk:checked').length === 0;
+  document.getElementById('flagBtn').disabled = disabled;
+  document.getElementById('flagBtnTop').disabled = disabled;
 }
 
 function selectAll() {
