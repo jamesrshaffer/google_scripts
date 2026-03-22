@@ -17,6 +17,7 @@ function exportMessages() {
   let errorMsg = null;
 
 const query = 'in:anywhere -in:sent -in:draft -in:trash before:' + _exportCutoffStr();
+Logger.log('Query: ' + query);  // ← here
 
   // ── Phase 1: collect stubs (newest-first from API) ──────────────────────
   let allStubs = [];
@@ -187,8 +188,6 @@ function _exportCutoffStr() {
   // Use whichever is earlier (stricter)
   const cutoff = byYears < byDays ? byYears : byDays;
   return Utilities.formatDate(cutoff, 'America/New_York', 'yyyy/MM/dd');
-  const query = 'in:anywhere -in:sent -in:draft -in:trash before:' + _exportCutoffStr();
-  Logger.log('Query: ' + query);
 }
 
 function resetExportPointer() {
