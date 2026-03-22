@@ -6,6 +6,8 @@ const API_KEY  = props.getProperty('API_KEY');
 const BATCH_SIZE = 100;
 const SEARCH_LIMIT = 1000;
 const QUOTA_SAFETY_LIMIT = 18000; // stop before hitting 20k hard ceiling
+const EXPORT_MIN_AGE_YEARS      = 10;  // primary cutoff — lower when inbox empties
+const EXPORT_RECENT_CUTOFF_DAYS = 90;  // safety floor: never export younger than this
 
 function exportMessages() {
   let apiCalls = 0;
@@ -14,7 +16,7 @@ function exportMessages() {
   let quotaExhausted = false;
   let errorMsg = null;
 
-  const query = 'in:anywhere -in:sent -in:draft -in:trash older_than:30d';
+const query = 'in:anywhere -in:sent -in:draft -in:trash before:' + _exportCutoffStr();
 
   // ── Phase 1: collect stubs (newest-first from API) ──────────────────────
   let allStubs = [];
@@ -173,6 +175,18 @@ function postBatch(batch) {
 function extractDomain(sender) {
   const match = sender.match(/@([\w.-]+)/);
   return match ? match[1].toLowerCase() : 'unknown';
+}
+
+function _exportCutoffStr() {
+  const byYears = new Date();
+  byYears.setFullYear(byYears.getFullYear() - EXPORT_MIN_AGE_YEARS);
+
+  const byDays = new Date();
+  byDays.setDate(byDays.getDate() - EXPORT_RECENT_CUTOFF_DAYS);
+
+  // Use whichever is earlier (stricter)
+  const cutoff = byYears < byDays ? byYears : byDays;
+  return Utilities.formatDate(cutoff, 'America/New_York', 'yyyy/MM/dd');
 }
 
 function resetExportPointer() {
