@@ -76,7 +76,7 @@ app.get('/stats', requireKey, async (req, res) => {
     SELECT sender_domain, total, flagged, trashed,
            (total - trashed) as remaining
     FROM v_domain_summary
-    WHERE trashed < total
+    WHERE flagged < total AND trashed < total
     ORDER BY total DESC
     LIMIT 100
   `);
