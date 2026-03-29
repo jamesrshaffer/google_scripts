@@ -43,7 +43,7 @@ function reconcileFlagged() {
         skipped++;  // exists in Gmail but not yet trashed — leave it
       }
     } catch(e) {
-      if (e.message.includes('404') || e.message.includes('Not Found')) {
+      if (e.message.includes('Requested entity was not found') || e.message.includes('404') || e.message.includes('Not Found')) {
         toPurge.push(id);
       } else {
         Logger.log('WARN unexpected error for ' + id + ': ' + e.message);
