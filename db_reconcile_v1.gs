@@ -52,16 +52,22 @@ function reconcileFlagged() {
     }
   }
 
-  // Purge non-existent rows
-  if (toPurge.length > 0) {
+  // Purge non-existent rows — chunked to avoid 502
+  const PURGE_CHUNK = 50;
+  let purgeErrors = 0;
+  for (let i = 0; i < toPurge.length; i += PURGE_CHUNK) {
+    const chunk = toPurge.slice(i, i + PURGE_CHUNK);
     const r = UrlFetchApp.fetch(API_BASE + '/messages/purge', {
       method: 'post',
       contentType: 'application/json',
       headers: { 'X-API-Key': API_KEY },
-      payload: JSON.stringify(toPurge),
+      payload: JSON.stringify(chunk),
       muteHttpExceptions: true
     });
-    if (r.getResponseCode() !== 200) Logger.log('ERROR on /messages/purge: ' + r.getContentText());
+    if (r.getResponseCode() !== 200) {
+      Logger.log('ERROR on /messages/purge chunk ' + i + ': ' + r.getContentText());
+      purgeErrors++;
+    }
   }
 
   // Mark already-trashed rows
