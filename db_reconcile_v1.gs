@@ -1,9 +1,9 @@
 // db_reconcile_v1.gs
 // Reconcile DB rows where flagged_delete=1, trashed=0 against live Gmail state.
 // Actions:
-//   404 from Gmail  → purge row from DB
-//   TRASH label     → mark trashed=1 in DB
-//   exists/active   → no action (logged)
+//   Not found in Gmail → purge row from DB (chunked 50 at a time)
+//   TRASH label        → mark trashed=1 in DB
+//   exists/active      → no action (logged)
 
 function reconcileFlagged() {
   const props = PropertiesService.getScriptProperties();
@@ -29,10 +29,10 @@ function reconcileFlagged() {
   Logger.log('Rows to reconcile: ' + ids.length);
   if (ids.length === 0) return;
 
-  const toPurge   = [];
-  const toTrash   = [];
-  let   skipped   = 0;
-  let   errors    = 0;
+  const toPurge = [];
+  const toTrash = [];
+  let   skipped = 0;
+  let   errors  = 0;
 
   for (const id of ids) {
     try {
@@ -40,10 +40,12 @@ function reconcileFlagged() {
       if ((msg.labelIds || []).includes('TRASH')) {
         toTrash.push(id);
       } else {
-        skipped++;  // exists in Gmail but not yet trashed — leave it
+        skipped++;
       }
     } catch(e) {
-      if (e.message.includes('Requested entity was not found') || e.message.includes('404') || e.message.includes('Not Found')) {
+      if (e.message.includes('Requested entity was not found') ||
+          e.message.includes('404') ||
+          e.message.includes('Not Found')) {
         toPurge.push(id);
       } else {
         Logger.log('WARN unexpected error for ' + id + ': ' + e.message);
@@ -52,7 +54,7 @@ function reconcileFlagged() {
     }
   }
 
-  // Purge non-existent rows — chunked to avoid 502
+  // Purge non-existent rows — chunked 50 at a time to avoid 502
   const PURGE_CHUNK = 50;
   let purgeErrors = 0;
   for (let i = 0; i < toPurge.length; i += PURGE_CHUNK) {
@@ -83,8 +85,4 @@ function reconcileFlagged() {
   }
 
   Logger.log('=== reconcileFlagged summary ===');
-  Logger.log('Purged (not in Gmail):     ' + toPurge.length);
-  Logger.log('Marked trashed (in TRASH): ' + toTrash.length);
-  Logger.log('Skipped (active in Gmail): ' + skipped);
-  Logger.log('Errors:                    ' + errors);
-}
+  Logger.log('Purged (not in Gmail):
