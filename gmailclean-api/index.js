@@ -215,7 +215,7 @@ app.post('/flag-sender', requireKey, async (req, res) => {
 });
 
 // DELETE rows for messages that no longer exist in Gmail
-app.post('/messages/purge', requireApiKey, async (req, res) => {
+app.post('/messages/purge', requireKey, async (req, res) => {
   const ids = req.body;
   if (!Array.isArray(ids) || ids.length === 0) return res.json({ deleted: 0 });
   const placeholders = ids.map(() => '?').join(',');
