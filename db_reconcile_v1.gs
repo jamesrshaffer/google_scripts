@@ -84,5 +84,8 @@ function reconcileFlagged() {
     if (r.getResponseCode() !== 200) Logger.log('ERROR on /trashed: ' + r.getContentText());
   }
 
-  Logger.log('=== reconcileFlagged summary ===');
-  Logger.log('Purged (not in Gmail):
+  if (purgeErrors > 0) {
+    Logger.log('Purged (not in Gmail):     ' + toPurge.length + ' (' + purgeErrors + ' chunk errors)');
+  } else {
+    Logger.log('Purged (not in Gmail):     ' + toPurge.length);
+  }
