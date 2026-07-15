@@ -1,0 +1,9 @@
+[Unit]
+Description=Live full-image backup of HomeAssistant VM to NAS
+After=network-online.target libvirtd.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ha-vm-backup.sh
+Nice=10
